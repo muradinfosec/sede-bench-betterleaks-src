@@ -1,0 +1,45 @@
+package rules
+
+import (
+	"github.com/betterleaks/betterleaks/v2/cmd/generate/config/utils"
+	"github.com/betterleaks/betterleaks/v2/cmd/generate/secrets"
+	"github.com/betterleaks/betterleaks/v2/config"
+)
+
+const highnoteLiveValidationExpr = `let r = http.post("https://api.us.highnote.com/graphql", {
+    "Authorization": "Basic " + base64.encode(bytes(finding["secret"])),
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  }, "{\"query\":\"query { ping }\"}"); r.status == 200 && (r.json?.data?.ping ?? "") == "pong" ? {
+    "result": "valid"
+  } : r.status in [401, 403] ? {
+    "result": "invalid",
+    "reason": "Unauthorized"
+  } : validate.unknown(r)`
+
+func HighnoteSecretLiveKey() *config.Rule {
+	// define rule
+	r := config.Rule{
+		ID:          "highnote-secret-live-key",
+		Confidence:  "high",
+		Description: "Highnote secret API key for the live environment.",
+		Regex: utils.GenerateSemiGenericRegex(
+			[]string{`highnote(?:[_. -]*(?:api))?[_. -]*(?:secret|key|token|sk[_. -]*live)`},
+			`sk_live_a2V5Xz[A-Za-z0-9+/]{69}={0,2}`,
+			false,
+		),
+		Keywords:     []string{"highnote"},
+		ValidateExpr: highnoteLiveValidationExpr,
+		FilterExpr:   utils.MinEntropy(3.5),
+	}
+
+	// validate
+	tps := []string{
+		"HIGHNOTE_SK_LIVE=\"sk_live_a2V5Xz" + secrets.NewSecretWithEntropy(`[A-Za-z0-9+/]{69}`, 3.5) + "\"",
+	}
+	fps := []string{
+		`HIGHNOTE_SK_LIVE="sk_live_short"`,
+
+	}
+	return utils.Validate(r, tps, fps)
+}

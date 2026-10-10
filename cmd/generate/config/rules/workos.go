@@ -1,0 +1,46 @@
+package rules
+
+import (
+	"github.com/betterleaks/betterleaks/v2/cmd/generate/config/utils"
+	"github.com/betterleaks/betterleaks/v2/config"
+)
+
+func WorkOSProductionAPIKey() *config.Rule {
+	// define rule
+	r := config.Rule{
+		ID:          "workos-production-api-key.1",
+		Confidence:  "high",
+		Description: "WorkOS production API key.",
+		Regex: utils.GenerateSemiGenericRegex(
+			[]string{`workos(?:[_. -]*(?:api))?[_. -]*(?:secret|key|token)`},
+			`sk_live_a2V5Xz[A-Za-z0-9+/]{69}={0,2}`,
+			false,
+		),
+		Keywords: []string{"workos"},
+		ValidateExpr: `let r = http.get("https://api.workos.com/organizations", {
+    "Authorization": "Bearer " + finding["secret"],
+    "Accept": "application/json"
+  }); r.status == 200 && (r.body contains "\"data\"") ? {
+    "result": "valid"
+  } : r.status == 403 ? {
+    "result": "valid",
+    "reason": "Authenticated but organization access is restricted"
+  } : r.status == 401 ? {
+    "result": "invalid",
+    "reason": "Unauthorized"
+  } : validate.unknown(r)`,
+		FilterExpr: `entropy(finding["secret"]) < 3.5
+|| matchesAny(finding["secret"], ["(?i)example"])`,
+	}
+
+	// validate
+	tps := []string{
+
+	}
+	fps := []string{
+
+		`WORKOS_API_KEY=sk_test_example`,
+
+	}
+	return utils.Validate(r, tps, fps)
+}

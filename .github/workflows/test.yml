@@ -1,0 +1,54 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        platform: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      # v6.0.2 (https://github.com/actions/checkout/releases/tag/v6.0.2)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Go
+        # v6.3.0 (https://github.com/actions/setup-go/releases/tag/v6.3.0)
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417
+        with:
+          go-version-file: go.mod
+
+      # v7.2.2 (https://github.com/goreleaser/goreleaser-action/releases/tag/v7.2.2)
+      - name: Check release configuration
+        if: matrix.platform == 'ubuntu-latest'
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89
+        with:
+          version: "~> v2"
+          args: check
+
+      - name: Build
+        run: go build ./...
+
+      - name: Validate default config with RE2
+        run: go run . config check config/betterleaks.toml
+
+      - name: Validate default config with stdlib regex
+        run: go run . --regex-engine stdlib config check config/betterleaks.toml
+
+      - name: Set up gotestsum
+        # https://github.com/gotestyourself/gotestsum/releases
+        run: |
+          go install gotest.tools/gotestsum@v1.13.0
+
+      - name: Test
+        run: |
+          gotestsum --raw-command -- go test -json ./... --race
+
+      # - name: Validate Config
+      #   run: go generate ./... && git diff --exit-code
